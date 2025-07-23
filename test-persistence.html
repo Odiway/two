@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Dependencies Persistence Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Task Dependencies Persistence Test</h1>
+        <p>This test simulates the localStorage persistence functionality for task dependencies.</p>
+        
+        <div id="status"></div>
+        
+        <button class="button" onclick="testSave()">🔄 Test Save Dependencies</button>
+        <button class="button" onclick="testLoad()">📥 Test Load Dependencies</button>
+        <button class="button" onclick="testClear()">🗑️ Clear Storage</button>
+        <button class="button" onclick="refreshPage()">🔄 Refresh Page</button>
+        
+        <div id="data-display" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        const projectId = 'test-project-123';
+        const dependenciesStorageKey = `project_dependencies_${projectId}`;
+        const dependentsStorageKey = `project_dependents_${projectId}`;
+        
+        // Sample test data
+        const sampleDependencies = {
+            'task-1': ['task-2', 'task-3'],
+            'task-4': ['task-1'],
+            'task-5': ['task-2', 'task-4']
+        };
+        
+        const sampleDependents = {
+            'task-1': ['task-4'],
+            'task-2': ['task-1', 'task-5'],
+            'task-3': ['task-1'],
+            'task-4': ['task-5']
+        };
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function updateDataDisplay() {
+            const dataDiv = document.getElementById('data-display');
+            const dependencies = JSON.parse(localStorage.getItem(dependenciesStorageKey) || '{}');
+            const dependents = JSON.parse(localStorage.getItem(dependentsStorageKey) || '{}');
+            
+            const totalDeps = Object.values(dependencies).reduce((acc, deps) => acc + deps.length, 0);
+            const totalDependents = Object.values(dependents).reduce((acc, deps) => acc + deps.length, 0);
+            
+            dataDiv.innerHTML = `
+                <h3>Current Storage Data:</h3>
+                <p><strong>Total Dependencies:</strong> ${totalDeps}</p>
+                <p><strong>Total Dependents:</strong> ${totalDependents}</p>
+                <details>
+                    <summary>Raw Dependencies Data</summary>
+                    <pre>${JSON.stringify(dependencies, null, 2)}</pre>
+                </details>
+                <details>
+                    <summary>Raw Dependents Data</summary>
+                    <pre>${JSON.stringify(dependents, null, 2)}</pre>
+                </details>
+            `;
+        }
+        
+        function testSave() {
+            try {
+                localStorage.setItem(dependenciesStorageKey, JSON.stringify(sampleDependencies));
+                localStorage.setItem(dependentsStorageKey, JSON.stringify(sampleDependents));
+                
+                // Also save backup
+                const backupData = {
+                    projectId,
+                    dependencies: sampleDependencies,
+                    dependents: sampleDependents,
+                    savedAt: new Date().toISOString()
+                };
+                localStorage.setItem(`${dependenciesStorageKey}_backup`, JSON.stringify(backupData));
+                
+                updateStatus('✅ Dependencies saved successfully to localStorage!', 'success');
+                updateDataDisplay();
+            } catch (error) {
+                updateStatus(`❌ Error saving: ${error.message}`, 'error');
+            }
+        }
+        
+        function testLoad() {
+            try {
+                const dependencies = localStorage.getItem(dependenciesStorageKey);
+                const dependents = localStorage.getItem(dependentsStorageKey);
+                
+                if (dependencies && dependents) {
+                    const depData = JSON.parse(dependencies);
+                    const depentData = JSON.parse(dependents);
+                    updateStatus('✅ Dependencies loaded successfully from localStorage!', 'success');
+                    updateDataDisplay();
+                } else {
+                    updateStatus('⚠️ No saved dependencies found in localStorage.', 'info');
+                }
+            } catch (error) {
+                updateStatus(`❌ Error loading: ${error.message}`, 'error');
+            }
+        }
+        
+        function testClear() {
+            try {
+                localStorage.removeItem(dependenciesStorageKey);
+                localStorage.removeItem(dependentsStorageKey);
+                localStorage.removeItem(`${dependenciesStorageKey}_backup`);
+                updateStatus('✅ All dependency data cleared from localStorage!', 'success');
+                updateDataDisplay();
+            } catch (error) {
+                updateStatus(`❌ Error clearing: ${error.message}`, 'error');
+            }
+        }
+        
+        function refreshPage() {
+            window.location.reload();
+        }
+        
+        // Initialize display on page load
+        window.onload = function() {
+            updateStatus('Ready to test localStorage persistence functionality.', 'info');
+            updateDataDisplay();
+        };
+    </script>
+</body>
+</html>

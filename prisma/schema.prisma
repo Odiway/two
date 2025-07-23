@@ -1,0 +1,272 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  department  String
+  position    String
+  photo       String?
+  studentId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // New fields for workload management
+  maxHoursPerDay Int @default(8) // Günlük maksimum çalışma saati
+  workingDays    String @default("1,2,3,4,5") // Çalışma günleri (1=Pazartesi)
+
+  // Relations
+  assignedTasks Task[]   @relation("AssignedUser")
+  createdTasks  Task[]   @relation("CreatedByUser")
+  projects      ProjectMember[]
+  teamMembers   TeamMember[]
+  taskAssignments TaskAssignment[]
+  notifications Notification[]
+  workloadAnalysis WorkloadAnalysis[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNING)
+  priority    Priority @default(MEDIUM)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // New fields for enhanced project management
+  originalEndDate DateTime? // Orijinal deadline
+  delayDays      Int @default(0) // Toplam gecikme günü
+  autoReschedule Boolean @default(true) // Otomatik yeniden planlama
+
+  // Relations
+  tasks       Task[]
+  members     ProjectMember[]
+  workflowSteps WorkflowStep[]
+  notifications Notification[]
+  bottlenecks   ProjectBottleneck[]
+  workloadAnalysis WorkloadAnalysis[]
+}
+
+model ProjectMember {
+  id        String @id @default(cuid())
+  projectId String
+  userId    String
+  role      String @default("Member")
+  
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, userId])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority @default(MEDIUM)
+  projectId   String
+  assignedId  String?  // Legacy field - keep for backward compatibility
+  createdById String?
+  startDate   DateTime?
+  endDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  workflowStepId String?
+  
+  // New fields for enhanced tracking
+  estimatedHours Int? // Tahmini süre (saat)
+  actualHours    Int? // Gerçekleşen süre (saat)
+  delayReason    String? // Gecikme nedeni
+  delayDays      Int @default(0) // Gecikme günü
+  workloadPercentage Int @default(0) // Çalışan doluluk oranı
+  isBottleneck   Boolean @default(false) // Darboğaz görev mi
+  originalEndDate DateTime? // Orijinal bitiş tarihi
+  
+  // Simple task grouping system (replaces complex dependencies)
+  taskType       TaskType @default(INDIVIDUAL) // INDIVIDUAL or GROUP
+  parentTaskId   String? // For grouped tasks, reference to parent
+  groupOrder     Int @default(0) // Order within group
+  isGroupParent  Boolean @default(false) // Is this a parent task?
+
+  // Relations
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedUser User?   @relation("AssignedUser", fields: [assignedId], references: [id])
+  createdBy    User?    @relation("CreatedByUser", fields: [createdById], references: [id])
+  workflowStep WorkflowStep? @relation(fields: [workflowStepId], references: [id])
+  
+  // Task grouping relations
+  parentTask   Task?   @relation("TaskGroup", fields: [parentTaskId], references: [id])
+  childTasks   Task[]  @relation("TaskGroup")
+  
+  // Many-to-many relation for multiple assignees
+  assignedUsers TaskAssignment[]
+  notifications Notification[]
+  timeTracking  TaskTimeTracking[]
+}
+
+model TaskAssignment {
+  id     String @id @default(cuid())
+  taskId String
+  userId String
+  assignedAt DateTime @default(now())
+  
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([taskId, userId])
+}
+
+model WorkflowStep {
+  id        String @id @default(cuid())
+  name      String
+  order     Int
+  color     String @default("#3B82F6")
+  projectId String
+  
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  
+  @@unique([projectId, order])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     TeamMember[]
+}
+
+model TeamMember {
+  id     String @id @default(cuid())
+  teamId String
+  userId String
+  role   String @default("Member")
+  
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([teamId, userId])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  BLOCKED
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  ON_HOLD
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  TASK_COMPLETED
+  TASK_STATUS_CHANGED
+  PROJECT_STATUS_CHANGED
+  PROJECT_DUE_SOON
+  PROJECT_OVERDUE
+  REMINDER
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  type        NotificationType
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Optional relations for context
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// New models for enhanced tracking
+model TaskTimeTracking {
+  id          String   @id @default(cuid())
+  taskId      String
+  status      TaskStatus
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int? // Duration in minutes
+  createdAt   DateTime @default(now())
+  
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model ProjectBottleneck {
+  id          String   @id @default(cuid())
+  projectId   String
+  date        DateTime
+  maxWorkload Int // Maximum workload percentage on this date
+  taskCount   Int // Number of tasks on this date
+  isBottleneck Boolean @default(false)
+  createdAt   DateTime @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, date])
+}
+
+model WorkloadAnalysis {
+  id             String   @id @default(cuid())
+  projectId      String
+  userId         String?
+  date           DateTime
+  workloadPercent Int
+  hoursAllocated Int
+  hoursAvailable Int
+  isOverloaded   Boolean @default(false)
+  createdAt      DateTime @default(now())
+  
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, userId, date])
+}
+
+// New enum for task grouping
+enum TaskType {
+  INDIVIDUAL  // Single standalone task
+  GROUP      // Task that is part of a group/tree
+}
